@@ -203,7 +203,7 @@ class Minesweeper(tk.Tk):
             7: "black",
             8: "gray",
         }
-        return colors.get(number, "black")
+        reaturn colors.get(number, "black")
 
     def check_win(self) -> bool:
         """Check whether the player has revealed all non‑mine cells."""
