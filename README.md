@@ -10,11 +10,19 @@ haciendo clic derecho sobre ellas.
 
 ## Características
 
-- Interfaz gráfica amigable construida con `tkinter`.
-- Tablero de 9×9 con 10 minas aleatorias.
-- Descubrimiento automático de celdas adyacentes vacías (efecto “flood”).
-- Posibilidad de reiniciar la partida sin salir del programa.
-- Código organizado en clases para facilitar su comprensión y extensión.
+-   **Interfaz Gráfica Avanzada**: Interfaz amigable construida con `tkinter`, que incluye una barra de menú superior.
+-   **Múltiples Niveles de Dificultad**:
+    * **Fácil**: Tablero de 9x9 con 10 minas.
+    * **Intermedio**: Tablero de 16x16 con 40 minas.
+    * **Difícil**: Tablero de 22x22 con 99 minas.
+-   **Temporizador**: Lleva un registro del tiempo transcurrido en cada partida.
+-   **Contador de Minas**: Muestra cuántas minas quedan por encontrar (o banderas por colocar).
+-   **Descubrimiento Automático**: Efecto "flood fill" para celdas adyacentes vacías.
+-   **Manejo de Clic Derecho Mejorado**: Alterna entre bandera (🚩), signo de interrogación (❓) y celda vacía.
+-   **Función de Chording**: Revela automáticamente las celdas circundantes si el número de banderas coincide con el número de minas vecinas.
+-   **Ventana Redimensionable Dinámicamente**: La ventana se ajusta automáticamente al tamaño del tablero seleccionado.
+-   **Posibilidad de Reiniciar**: Comienza una nueva partida en cualquier momento desde el menú o el botón de reinicio.
+-   **Código Organizado**: Estructura en clases para facilitar su comprensión y extensión.
 
 ## Requisitos
 
