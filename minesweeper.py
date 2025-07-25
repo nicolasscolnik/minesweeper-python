@@ -19,7 +19,7 @@ class Cell:
         self.col = col
         self.is_mine = False
         self.is_revealed = False
-        self.is_flagged = False
+        self.right_click_state = 0  # 0: Empty, 1: Flagged, 2: Question Mark
         self.neighbour_mines = 0
         self.button = tk.Button(
             master,
@@ -38,10 +38,18 @@ class Cell:
             lambda e, cell=self: master.master.handle_right_click(cell),
         )
 
+    @property
+    def is_flagged(self) -> bool:
+        return self.right_click_state == 1
+
+    @property
+    def is_questioned(self) -> bool:
+        return self.right_click_state == 2
+
     def __repr__(self) -> str:
         return (
             f"Cell({self.row}, {self.col}, mine={self.is_mine}, "
-            f"revealed={self.is_revealed}, flagged={self.is_flagged})"
+            f"revealed={self.is_revealed}, state={self.right_click_state})"
         )
 
 
@@ -51,7 +59,7 @@ class Minesweeper(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("Buscaminas - Python")
-        self.resizable(False, False) # Evita que se cambie el tamaño de la ventana
+        self.resizable(False, False)
 
         # --- Estado del juego ---
         self.board_size = 9
@@ -64,17 +72,14 @@ class Minesweeper(tk.Tk):
         self.timer_id = None
 
         # --- Creación de la Interfaz ---
-        # Marco superior para la barra de estado (contadores y reinicio)
         self.status_frame = tk.Frame(self, padx=10, pady=5)
         self.status_frame.pack(fill="x")
 
-        # Contador de minas
         self.mine_counter_label = tk.Label(
             self.status_frame, font=("Helvetica", 16, "bold"), width=5
         )
         self.mine_counter_label.pack(side="left")
 
-        # Botón de reinicio con emoji
         self.restart_button = tk.Button(
             self.status_frame,
             text="🙂",
@@ -83,28 +88,25 @@ class Minesweeper(tk.Tk):
         )
         self.restart_button.pack(side="left", expand=True)
 
-        # Contador de tiempo
         self.time_label = tk.Label(
             self.status_frame, font=("Helvetica", 16, "bold"), width=5
         )
         self.time_label.pack(side="right")
         
-        # Marco para el tablero de celdas
         self.board_frame = tk.Frame(self, padx=5, pady=5)
         self.board_frame.pack()
         
-        # Iniciar el juego pidiendo la dificultad
         self.prompt_difficulty()
 
     def prompt_difficulty(self) -> None:
         """Muestra una ventana para elegir la dificultad y reiniciar el juego."""
         if self.timer_id:
-            self.after_cancel(self.timer_id) # Detener temporizador si está activo
+            self.after_cancel(self.timer_id)
             
         dialog = tk.Toplevel(self)
         dialog.title("Nueva Partida")
-        dialog.transient(self) # Mantener la ventana al frente
-        dialog.grab_set() # Modal: bloquea la ventana principal
+        dialog.transient(self)
+        dialog.grab_set()
         dialog.resizable(False, False)
         
         tk.Label(dialog, text="Elige un nivel de dificultad:", padx=20, pady=10).pack()
@@ -121,7 +123,7 @@ class Minesweeper(tk.Tk):
         """Configura e inicia una nueva partida con la dificultad elegida."""
         self.board_size = size
         self.num_mines = mines
-        dialog.destroy() # Cerrar la ventana de selección
+        dialog.destroy()
         self.reset_game()
 
     def create_board(self) -> None:
@@ -163,14 +165,40 @@ class Minesweeper(tk.Tk):
         return count
 
     def handle_left_click(self, cell: Cell) -> None:
-        """Procesa el clic izquierdo: revela la celda."""
-        if self.game_over or cell.is_revealed or cell.is_flagged:
+        """Procesa el clic izquierdo: revela la celda o activa el 'chording'."""
+        if self.game_over or cell.is_flagged:
+            return
+
+        # --- LÓGICA DE CHORDING ---
+        if cell.is_revealed and cell.neighbour_mines > 0:
+            adjacent_flags = 0
+            for dr in range(-1, 2):
+                for dc in range(-1, 2):
+                    rr, cc = cell.row + dr, cell.col + dc
+                    if 0 <= rr < self.board_size and 0 <= cc < self.board_size:
+                        if self.cells[rr][cc].is_flagged:
+                            adjacent_flags += 1
+            
+            if adjacent_flags == cell.neighbour_mines:
+                for dr in range(-1, 2):
+                    for dc in range(-1, 2):
+                        if dr == 0 and dc == 0:
+                            continue
+                        rr, cc = cell.row + dr, cell.col + dc
+                        if 0 <= rr < self.board_size and 0 <= cc < self.board_size:
+                            neighbor = self.cells[rr][cc]
+                            # --- LA CORRECCIÓN ESTÁ AQUÍ ---
+                            # Solo actuar sobre celdas no reveladas y sin bandera
+                            if not neighbor.is_revealed and not neighbor.is_flagged:
+                                self.handle_left_click(neighbor)
+            return
+
+        # Si el clic es en una celda no revelada, continuar con la lógica normal
+        if cell.is_revealed:
             return
 
         if self.first_click:
-            # Asegurarse de que el primer clic nunca sea una mina
             if cell.is_mine:
-                # Mover la mina a otra ubicación
                 self.move_mine(cell)
             self.start_timer()
             self.first_click = False
@@ -185,27 +213,40 @@ class Minesweeper(tk.Tk):
             self.end_game(won=True)
 
     def handle_right_click(self, cell: Cell) -> None:
-        """Alterna la bandera de una celda con clic derecho."""
+        """Alterna el estado de una celda con clic derecho: Vacío -> Bandera -> Interrogación -> Vacío."""
         if self.game_over or cell.is_revealed:
             return
         
-        if not cell.is_flagged and self.flags_placed < self.num_mines:
-            cell.is_flagged = True
-            cell.button.config(text="🚩", disabledforeground="red")
-            self.flags_placed += 1
-        elif cell.is_flagged:
-            cell.is_flagged = False
+        # Determine the next state
+        if cell.right_click_state == 0:  # Currently empty, go to flagged
+            if self.flags_placed < self.num_mines:
+                cell.right_click_state = 1
+                cell.button.config(text="🚩", disabledforeground="red")
+                self.flags_placed += 1
+            else: # If no flags left, cycle directly to question mark
+                cell.right_click_state = 2
+                cell.button.config(text="?", disabledforeground="blue")
+        elif cell.right_click_state == 1:  # Currently flagged, go to question mark
+            cell.right_click_state = 2
+            cell.button.config(text="?", disabledforeground="blue")
+            self.flags_placed -= 1 # Decrement flag count when moving from flag
+        elif cell.right_click_state == 2:  # Currently question mark, go to empty
+            cell.right_click_state = 0
             cell.button.config(text="")
-            self.flags_placed -= 1
         
         self.update_mine_counter()
 
     def reveal_cell(self, cell: Cell) -> None:
         """Revela la celda y se expande si no tiene minas vecinas."""
-        if cell.is_revealed or cell.is_flagged:
+        if cell.is_revealed or cell.is_flagged: # Still prevent revealing flagged cells
             return
         cell.is_revealed = True
         cell.button.config(relief="sunken", state="disabled")
+
+        # If it was a question mark, clear its text
+        if cell.is_questioned:
+            cell.button.config(text="")
+            cell.right_click_state = 0 # Reset state to empty after revealing
 
         if cell.neighbour_mines > 0:
             cell.button.config(
@@ -213,7 +254,6 @@ class Minesweeper(tk.Tk):
                 disabledforeground=self.number_color(cell.neighbour_mines),
             )
         else:
-            # Si no hay minas vecinas, revelar las celdas alrededor
             for dr in (-1, 0, 1):
                 for dc in (-1, 0, 1):
                     if dr == 0 and dc == 0:
@@ -234,8 +274,10 @@ class Minesweeper(tk.Tk):
                     cell.button.config(
                         text="💣", state="disabled", relief="sunken"
                     )
-                if not cell.is_mine and cell.is_flagged:
+                if not cell.is_mine and cell.is_flagged: # If it's flagged but not a mine
                     cell.button.config(text="❌")
+                elif not cell.is_mine and cell.is_questioned: # If it's questioned but not a mine
+                    cell.button.config(text="") # Clear the question mark
 
     @staticmethod
     def number_color(number: int) -> str:
@@ -261,11 +303,10 @@ class Minesweeper(tk.Tk):
             new_cell = self.cells[r][c]
             if not new_cell.is_mine and new_cell != cell:
                 new_cell.is_mine = True
-                # Recalcular los vecinos para las celdas afectadas
-                for row in self.cells:
-                    for c_ in row:
-                        if not c_.is_mine:
-                           c_.neighbour_mines = self.count_adjacent_mines(c_.row, c_.col)
+                for row_to_update in self.cells:
+                    for cell_to_update in row_to_update:
+                        if not cell_to_update.is_mine:
+                           cell_to_update.neighbour_mines = self.count_adjacent_mines(cell_to_update.row, cell_to_update.col)
                 break
 
     def end_game(self, won: bool) -> None:
@@ -295,10 +336,16 @@ class Minesweeper(tk.Tk):
         self.update_mine_counter()
         self.update_timer_label()
 
+        # Primero, limpia y crea el nuevo tablero
         self.create_board()
-        self.update_idletasks() # Asegura que la ventana se ajuste al nuevo tamaño
-        self.geometry(f"{self.winfo_width()}x{self.winfo_height()}")
 
+        # Fuerza a Tkinter a procesar el nuevo diseño
+        self.update_idletasks()
+        
+        # Luego, permite que la ventana se redimensione automáticamente
+        # para ajustarse al nuevo tablero. Usamos '' para que se ajuste.
+        self.geometry('')
+    
     def update_mine_counter(self) -> None:
         """Actualiza el texto del contador de minas."""
         remaining = self.num_mines - self.flags_placed
