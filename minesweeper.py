@@ -64,6 +64,7 @@ class Cell:
         return f"Cell({self.row}, {self.col}, mine={self.is_mine}, revealed={self.is_revealed}, flagged={self.is_flagged}, neighbours={self.neighbour_mines})"
 
 
+
 class Minesweeper(tk.Tk):
     """Main application class for the Minesweeper game."""
 
@@ -100,7 +101,9 @@ class Minesweeper(tk.Tk):
         for row in range(self.BOARD_SIZE):
             row_cells: list[Cell] = []
             for col in range(self.BOARD_SIZE):
-                cell = Cell(self.frame, row, col)
+              
+
+              cell = Cell(self.frame, row, col)
                 row_cells.append(cell)
             self.cells.append(row_cells)
         # Place mines at random positions.
@@ -136,6 +139,7 @@ class Minesweeper(tk.Tk):
         if cell.is_mine:
             self.reveal_mine(cell)
             self.game_over = True
+          
             self.show_all_mines()
             messagebox.showinfo("Fin del juego", "¡Boom! Has encontrado una mina. Has perdido.")
             return
